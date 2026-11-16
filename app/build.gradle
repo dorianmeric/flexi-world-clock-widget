@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.flexi.worldclock'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.flexi.worldclock"
+        minSdk 31
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // The release APK is signed outside Gradle by scripts/build.ps1 so that
+    // v2 + v3 + v4 signatures (and the .idsig file) are produced explicitly.
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig null
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // android.jar ships stubbed org.json methods, so the JVM tests need a real implementation.
+    testImplementation 'org.json:json:20240303'
+    testImplementation 'junit:junit:4.13.2'
+
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'junit:junit:4.13.2'
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#FF0F2A44</color>
+    <color name="accent">#FF2E9BD6</color>
+
+    <color name="widget_background">#CC12161C</color>
+    <color name="widget_time_text">#FFFFFFFF</color>
+    <color name="widget_date_text">#FFB9C4D1</color>
+    <color name="widget_city_text">#FFE3E8EF</color>
+    <color name="widget_zone_time_text">#FFFFFFFF</color>
+    <color name="widget_offset_text">#FF9AA7B6</color>
+
+    <color name="surface">#FFF6F8FA</color>
+    <color name="ic_launcher_background">#FF0F2A44</color>
+</resources>

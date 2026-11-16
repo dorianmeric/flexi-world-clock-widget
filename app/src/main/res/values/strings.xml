@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Flexi World-Clock Widget</string>
+
+    <string name="clock_widget_name">Flexi Clock</string>
+    <string name="clock_widget_description">Time with seconds plus the date, with custom fonts, sizes and padding.</string>
+
+    <string name="world_clock_widget_name">Flexi World Clock</string>
+    <string name="world_clock_widget_description">Up to 10 timezones side by side, with custom fonts, sizes, spacing and width.</string>
+
+    <!-- Clock widget configuration -->
+    <string name="clock_config_title">Clock widget</string>
+    <string name="time_font">Time font</string>
+    <string name="time_size">Time size</string>
+    <string name="date_font">Date font</string>
+    <string name="date_size">Date size</string>
+    <string name="left_padding">Left padding</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="preview">Preview</string>
+
+    <!-- World clock configuration -->
+    <string name="world_config_title">World clock widget</string>
+    <string name="city_font">City font</string>
+    <string name="city_size">City size</string>
+    <string name="time_font_label">Time font</string>
+    <string name="time_size_label">Time size</string>
+    <string name="offset_size">UTC label size</string>
+    <string name="show_offset">Show UTC offset</string>
+    <string name="spacing">Spacing between clocks</string>
+    <string name="widget_width">Widget width</string>
+    <string name="zones">Timezones (%1$d/%2$d)</string>
+    <string name="add_timezone">Add timezone</string>
+    <string name="remove_timezone">Remove timezone</string>
+    <string name="no_zones">No timezones yet — add at least one.</string>
+    <string name="add_timezone_title">Add timezone</string>
+    <string name="search_hint">Search city or timezone</string>
+    <string name="zone_limit_reached">You can add up to %1$d timezones.</string>
+    <string name="no_search_results">No matching timezone</string>
+
+    <!-- Main screen -->
+    <string name="main_headline">Two flexible home-screen widgets</string>
+    <string name="main_clock_summary">2×1 clock with seconds and date, fully customisable typography.</string>
+    <string name="main_world_summary">Flexible-width world clock with up to 10 timezones.</string>
+    <string name="pin_clock">Add clock widget</string>
+    <string name="pin_world_clock">Add world clock widget</string>
+    <string name="pin_unavailable">This launcher does not support adding widgets directly. Long-press the home screen and pick a widget instead.</string>
+    <string name="pin_success">Confirm the widget on your home screen.</string>
+    <string name="main_hint">Widgets can be reconfigured at any time by tapping them on the home screen.</string>
+
+    <!-- Units -->
+    <string name="value_sp">%1$s sp</string>
+    <string name="value_dp">%1$s dp</string>
+        <string name="value_cells">%1$s cells</string>
+
+        <!-- Static sample content for the launcher's widget-picker preview -->
+        <string name="preview_clock_time" translatable="false">23:30-55</string>
+        <string name="preview_clock_date" translatable="false">Monday 16-Nov</string>
+        <string name="preview_city_london" translatable="false">London</string>
+        <string name="preview_time_london" translatable="false">22:45</string>
+        <string name="preview_city_new_york" translatable="false">New York</string>
+        <string name="preview_time_new_york" translatable="false">17:45</string>
+        <string name="preview_city_tokyo" translatable="false">Tokyo</string>
+        <string name="preview_time_tokyo" translatable="false">06:45</string>
+</resources>

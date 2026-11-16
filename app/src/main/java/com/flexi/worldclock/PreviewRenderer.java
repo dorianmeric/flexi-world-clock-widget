@@ -47,4 +47,11 @@ final class PreviewRenderer {
         options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, Math.round(widthDp));
         return options;
     }
+
+        /** Widget options matching a preview at a given width and height, in dp. */
+        static Bundle options(float widthDp, float heightDp) {
+            Bundle options = options(widthDp);
+            options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, Math.round(heightDp));
+            return options;
+        }
 }

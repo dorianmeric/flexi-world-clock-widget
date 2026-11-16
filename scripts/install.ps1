@@ -9,6 +9,7 @@
 #   .\scripts\install.ps1 -Uninstall       # uninstall first
 #   .\scripts\install.ps1 -Emulator        # boot the bundled AVD headless if no device
 #   .\scripts\install.ps1 -Apk path\to.apk # install a specific APK
+#   .\scripts\install.ps1 -Serial emulator-5554  # target one device when several are attached
 
 [CmdletBinding()]
 param(
@@ -16,7 +17,8 @@ param(
     [switch]$Launch,
     [switch]$Uninstall,
     [switch]$Emulator,
-    [string]$AvdName = 'flexi_api35'
+    [string]$AvdName = 'flexi_api35',
+    [string]$Serial
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,8 +34,13 @@ $packageName = 'com.flexi.worldclock'
 
 function Get-ConnectedSerial {
     $lines = & $adb devices | Select-Object -Skip 1
+    $serial = ($env:ANDROID_SERIAL, $script:Serial |
+        Where-Object { $_ } | Select-Object -First 1)
     foreach ($line in $lines) {
-        if ($line -match '^(\S+)\s+device$') { return $matches[1] }
+        if ($line -match '^(\S+)\s+device$') {
+            # Prefer an explicitly requested device over whichever enumerated first.
+            if (-not $serial -or $matches[1] -eq $serial) { return $matches[1] }
+        }
     }
     return $null
 }

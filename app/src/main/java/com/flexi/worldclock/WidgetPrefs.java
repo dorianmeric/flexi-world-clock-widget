@@ -114,6 +114,7 @@ public final class WidgetPrefs {
         public TextStyle date = new TextStyle(Fonts.DEFAULT_FAMILY, 16f);
         public float leftPaddingDp = 12f;
         public float verticalPaddingDp = 4f;
+                public WidgetBackground.Settings background = WidgetBackground.Settings.defaults();
 
         public static ClockSettings defaults() {
             return new ClockSettings();
@@ -125,6 +126,7 @@ public final class WidgetPrefs {
                 json.put("time", time.toJson());
                 json.put("date", date.toJson());
                 json.put("leftPadding", leftPaddingDp);
+                json.put("background", background.toJson());
                 json.put("verticalPadding", verticalPaddingDp);
             } catch (JSONException ignored) {
                 // Values are primitives, encoding cannot fail.
@@ -141,6 +143,7 @@ public final class WidgetPrefs {
             settings.leftPaddingDp = clamp((float) json.optDouble("leftPadding", 12f), 0f, 96f);
             settings.verticalPaddingDp =
                     clamp((float) json.optDouble("verticalPadding", 4f), 0f, 48f);
+                        settings.background = WidgetBackground.Settings.fromJson(json.optJSONObject("background"));
             return settings;
         }
     }
@@ -182,6 +185,7 @@ public final class WidgetPrefs {
         public float spacingDp = 8f;
         public int widthCells = 4;
         public List<ZoneEntry> zones = new ArrayList<>();
+                public WidgetBackground.Settings background = WidgetBackground.Settings.defaults();
 
         public static WorldClockSettings defaults() {
             WorldClockSettings settings = new WorldClockSettings();
@@ -201,6 +205,7 @@ public final class WidgetPrefs {
                 json.put("showOffset", showOffset);
                 json.put("spacing", spacingDp);
                 json.put("widthCells", widthCells);
+                json.put("background", background.toJson());
                 JSONArray array = new JSONArray();
                 for (ZoneEntry zone : zones) {
                     array.put(zone.toJson());
@@ -243,6 +248,7 @@ public final class WidgetPrefs {
                 zones = defaults().zones;
             }
             settings.zones = zones;
+                        settings.background = WidgetBackground.Settings.fromJson(json.optJSONObject("background"));
             return settings;
         }
     }

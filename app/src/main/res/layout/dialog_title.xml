@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Title row of the timezone picker dialog. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/DialogTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="24dp"
+    android:paddingTop="20dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="12dp"
+    android:fontFamily="sans-serif-medium" />

@@ -13,7 +13,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -38,6 +37,9 @@ public class WorldClockConfigActivity extends Activity {
     private static final int MAX_OFFSET_SP = 20;
     private static final int MAX_SPACING_DP = 48;
 
+    /** Height the single-row widget occupies on a launcher grid, used for the preview. */
+    private static final float PREVIEW_HEIGHT_DP = 56f;
+
     private int appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private boolean confirmed;
     private WidgetPrefs.WorldClockSettings settings;
@@ -58,11 +60,10 @@ public class WorldClockConfigActivity extends Activity {
         }
 
         setContentView(R.layout.activity_world_clock_config);
-        setTitle(R.string.world_config_title);
+        Ui.applyStatusBarInset(findViewById(R.id.screen_root));
         settings = WidgetPrefs.loadWorld(this, appWidgetId);
 
         previewHost = findViewById(R.id.preview_host);
-        previewHost.setPadding(8, 8, 8, 8);
         zoneList = findViewById(R.id.zone_list);
         zonesHeader = findViewById(R.id.zones_header);
 
@@ -104,14 +105,22 @@ public class WorldClockConfigActivity extends Activity {
         showOffset.setOnCheckedChangeListener((buttonView, isChecked) -> {
             settings.showOffset = isChecked;
             findViewById(R.id.offset_size).setEnabled(isChecked);
+            findViewById(R.id.offset_size_value).setAlpha(isChecked ? 1f : 0.4f);
             renderPreview();
         });
         findViewById(R.id.offset_size).setEnabled(settings.showOffset);
+        findViewById(R.id.offset_size_value).setAlpha(settings.showOffset ? 1f : 0.4f);
 
         findViewById(R.id.add_zone).setOnClickListener(v -> showPicker(null));
         findViewById(R.id.save).setOnClickListener(v -> save());
         findViewById(R.id.cancel).setOnClickListener(v -> finish());
 
+        Ui.bindBackground(getWindow().getDecorView(), settings.background, background -> {
+            settings.background = background;
+            renderPreview();
+        });
+
+        DragReorder.attach(zoneList, settings.zones, this::onOrderChanged);
         renderZoneList();
         renderPreview();
     }
@@ -133,42 +142,72 @@ public class WorldClockConfigActivity extends Activity {
         });
     }
 
+    /** Called live while the user drags a row, and once when the drag ends. */
+    private void onOrderChanged() {
+            // The dragged row's own view must not be rebuilt mid-gesture, so only the labels of the
+            // already-swapped rows and the widget preview are refreshed.
+            refreshZoneLabels();
+            renderPreview();
+    }
+
     private void renderZoneList() {
         zoneList.removeAllViews();
         if (settings.zones.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText(R.string.no_zones);
+            empty.setTextColor(getColor(R.color.text_secondary));
+            empty.setTextSize(13f);
+            empty.setPadding(0, dp(12), 0, dp(12));
             zoneList.addView(empty);
         }
 
         long now = System.currentTimeMillis();
         for (int i = 0; i < settings.zones.size(); i++) {
-            WidgetPrefs.ZoneEntry zone = settings.zones.get(i);
-            View row = LayoutInflater.from(this)
-                    .inflate(R.layout.item_zone_row, zoneList, false);
-
-            Button pick = row.findViewById(R.id.zone_pick);
-            pick.setText(zoneLabel(zone, now));
-            int index = i;
-            pick.setOnClickListener(v -> showPicker(index));
-
-            row.findViewById(R.id.zone_remove).setOnClickListener(v -> {
-                settings.zones.remove(index);
-                renderZoneList();
-                renderPreview();
-            });
-
+            View row = buildZoneRow(i, now);
             zoneList.addView(row);
         }
-
-        zonesHeader.setText(getString(R.string.zones, settings.zones.size(),
-                WidgetPrefs.WorldClockSettings.MAX_ZONES));
+        updateZonesHeader();
         findViewById(R.id.add_zone).setEnabled(
                 settings.zones.size() < WidgetPrefs.WorldClockSettings.MAX_ZONES);
     }
 
-    private String zoneLabel(WidgetPrefs.ZoneEntry zone, long now) {
-        return zone.label + "  ·  " + ClockFormats.utcLabel(zone.zoneId, now);
+    /** Creates one row; the drag handle needs the index, so rows are built here. */
+    private View buildZoneRow(int index, long now) {
+        WidgetPrefs.ZoneEntry zone = settings.zones.get(index);
+        View row = LayoutInflater.from(this).inflate(R.layout.item_zone_row, zoneList, false);
+
+        TextView city = row.findViewById(R.id.zone_city_label);
+        TextView meta = row.findViewById(R.id.zone_meta_label);
+        city.setText(zone.label);
+        meta.setText(zone.zoneId + "  ·  " + ClockFormats.utcLabel(zone.zoneId, now));
+
+        row.findViewById(R.id.zone_pick).setOnClickListener(v -> showPicker(index));
+        row.findViewById(R.id.zone_remove).setOnClickListener(v -> {
+            settings.zones.remove(index);
+            renderZoneList();
+            renderPreview();
+        });
+        DragReorder.markHandle(row.findViewById(R.id.zone_handle), index);
+        return row;
+    }
+
+    /** After a drag the rows keep their views but must show the new order's data. */
+    private void refreshZoneLabels() {
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < zoneList.getChildCount() && i < settings.zones.size(); i++) {
+            View row = zoneList.getChildAt(i);
+            WidgetPrefs.ZoneEntry zone = settings.zones.get(i);
+            ((TextView) row.findViewById(R.id.zone_city_label)).setText(zone.label);
+            ((TextView) row.findViewById(R.id.zone_meta_label)).setText(
+                    zone.zoneId + "  ·  " + ClockFormats.utcLabel(zone.zoneId, now));
+            DragReorder.markHandle(row.findViewById(R.id.zone_handle), i);
+        }
+        updateZonesHeader();
+    }
+
+    private void updateZonesHeader() {
+        zonesHeader.setText(getString(R.string.zones, settings.zones.size(),
+                WidgetPrefs.WorldClockSettings.MAX_ZONES));
     }
 
     /** {@code replaceIndex} of {@code null} appends a new zone, otherwise replaces that zone. */
@@ -183,12 +222,21 @@ public class WorldClockConfigActivity extends Activity {
         View content = LayoutInflater.from(this).inflate(R.layout.dialog_zone_picker, null);
         EditText search = content.findViewById(R.id.zone_search);
         ListView results = content.findViewById(R.id.zone_results);
+                TextView emptyView = new TextView(this);
+                emptyView.setText(R.string.no_search_results);
+                emptyView.setTextColor(getColor(R.color.text_secondary));
+                emptyView.setTextSize(13f);
+                emptyView.setGravity(android.view.Gravity.CENTER);
+                emptyView.setPadding(0, dp(24), 0, dp(24));
+                ((ViewGroup) results.getParent()).addView(emptyView);
+                results.setEmptyView(emptyView);
 
         ZoneAdapter adapter = new ZoneAdapter(this, zoneChoices());
         results.setAdapter(adapter);
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.add_timezone_title)
+        AlertDialog dialog = new AlertDialog.Builder(this, R.style.PickerDialog)
+                        .setCustomTitle(titleView(replaceIndex == null
+                                ? R.string.add_timezone_title : R.string.change_timezone_title))
                 .setView(content)
                 .setNegativeButton(R.string.cancel, null)
                 .create();
@@ -248,13 +296,15 @@ public class WorldClockConfigActivity extends Activity {
         }
         float widthDp = settings.widthCells * WorldClockWidgetViews.CELL_DP;
         PreviewRenderer.show(previewHost, WorldClockWidgetViews.build(this, settings,
-                        AppWidgetManager.INVALID_APPWIDGET_ID, PreviewRenderer.options(widthDp)),
+                        AppWidgetManager.INVALID_APPWIDGET_ID,
+                        PreviewRenderer.options(widthDp, PREVIEW_HEIGHT_DP)),
                 widthDp);
     }
 
     private void save() {
         WidgetPrefs.saveWorld(this, appWidgetId, settings);
         WorldClockWidgetViews.updateNow(this, appWidgetId);
+        // The rows are ordered as configured, so the home screen reflects the drag result at once.
         confirmed = true;
         setResult(RESULT_OK,
                 new Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId));
@@ -268,6 +318,16 @@ public class WorldClockConfigActivity extends Activity {
         }
         super.finish();
     }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+        private View titleView(int textRes) {
+            View view = LayoutInflater.from(this).inflate(R.layout.dialog_title, null);
+            ((TextView) view).setText(textRes);
+            return view;
+        }
 
     static int readAppWidgetId(Intent intent) {
         if (intent == null) {
@@ -317,8 +377,9 @@ public class WorldClockConfigActivity extends Activity {
             TextView title = row.findViewById(android.R.id.text1);
             TextView subtitle = row.findViewById(android.R.id.text2);
             title.setText(zone.label);
-            subtitle.setText(zone.id + "  ·  "
-                    + ClockFormats.utcLabel(zone.id, now));
+            title.setTextColor(context.getColor(R.color.text_primary));
+            subtitle.setText(zone.id + "  ·  " + ClockFormats.utcLabel(zone.id, now));
+            subtitle.setTextColor(context.getColor(R.color.text_secondary));
             return row;
         }
     }

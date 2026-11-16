@@ -2,23 +2,24 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/clock_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_background">
+    android:layout_height="match_parent">
+
+    <include layout="@layout/widget_background_layer" />
 
     <LinearLayout
         android:id="@+id/clock_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="start|center_vertical">
+        android:gravity="start|center_vertical"
+        android:orientation="vertical">
 
         <TextClock
             android:id="@+id/clock_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif"
-                    android:format12Hour="23:30-55"
-                    android:format24Hour="23:30-55"
+            android:format12Hour="23:30-55"
+            android:format24Hour="23:30-55"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="@color/widget_time_text"
@@ -29,8 +30,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif"
-                    android:format12Hour="Monday 16-Nov"
-                    android:format24Hour="Monday 16-Nov"
+            android:format12Hour="Monday 16-Nov"
+            android:format24Hour="Monday 16-Nov"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="@color/widget_date_text"

@@ -6,6 +6,10 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public class WorldClockSettingsTest {
 
     @Test
@@ -120,4 +124,41 @@ public class WorldClockSettingsTest {
         assertEquals(3 * WorldClockWidgetViews.CELL_DP,
                 WorldClockWidgetViews.configuredWidthDp(settings), 0.01f);
     }
+
+        @Test
+        public void reorderMovesTheEntryAndKeepsTheRestInOrder() {
+            List<String> order = new ArrayList<>(Arrays.asList("London", "New York", "Tokyo", "Sydney"));
+
+            DragReorder.reorder(order, 3, 0);
+            assertEquals(Arrays.asList("Sydney", "London", "New York", "Tokyo"), order);
+
+            DragReorder.reorder(order, 0, 2);
+            assertEquals(Arrays.asList("London", "New York", "Sydney", "Tokyo"), order);
+        }
+
+        @Test
+        public void reorderIgnoresOutOfRangeMoves() {
+            List<String> order = new ArrayList<>(Arrays.asList("London", "Tokyo"));
+            DragReorder.reorder(order, -1, 1);
+            DragReorder.reorder(order, 0, 5);
+            DragReorder.reorder(order, 1, 1);
+            assertEquals(Arrays.asList("London", "Tokyo"), order);
+        }
+
+        @Test
+        public void reorderOfTwoZonesSwapsThem() {
+            List<String> order = new ArrayList<>(Arrays.asList("Vientiane", "Dhaka"));
+            DragReorder.reorder(order, 0, 1);
+            assertEquals(Arrays.asList("Dhaka", "Vientiane"), order);
+        }
+
+        @Test
+        public void newCitiesAreInTheCatalogue() {
+            assertTrue(ClockFormats.isValidZone("Asia/Vientiane"));
+            assertTrue(ClockFormats.isValidZone("Asia/Dhaka"));
+            assertEquals("Vientiane", ZoneCatalog.labelFor("Asia/Vientiane"));
+            assertEquals("Dhaka", ZoneCatalog.labelFor("Asia/Dhaka"));
+            assertFalse(ZoneCatalog.search("vientiane").isEmpty());
+            assertFalse(ZoneCatalog.search("dhaka").isEmpty());
+        }
 }

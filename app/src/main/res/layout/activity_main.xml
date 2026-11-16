@@ -1,71 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screen_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:orientation="vertical">
 
-    <TextView
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/app_name"
-        android:textSize="24sp"
-        android:textStyle="bold" />
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="@string/main_headline"
-        android:textSize="14sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="28dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="28dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/clock_widget_name"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+            <TextView
+                style="@style/ScreenTitle"
+                android:text="@string/app_name" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/main_clock_summary"
-        android:textSize="14sp" />
+            <TextView
+                style="@style/ScreenSubtitle"
+                android:text="@string/main_headline" />
 
-    <Button
-        android:id="@+id/pin_clock"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/pin_clock" />
+            <!-- Flexi Clock card -->
+            <LinearLayout
+                style="@style/Card"
+                android:layout_marginTop="24dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/world_clock_widget_name"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+                <TextView
+                    style="@style/CardTitle"
+                    android:text="@string/clock_widget_name" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/main_world_summary"
-        android:textSize="14sp" />
+                <TextView
+                    style="@style/CardCaption"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/main_clock_summary" />
 
-    <Button
-        android:id="@+id/pin_world"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/pin_world_clock" />
+                <Button
+                    android:id="@+id/pin_clock"
+                    style="@style/PrimaryButton"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/pin_clock" />
+            </LinearLayout>
 
-    <TextView
-        android:id="@+id/main_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/main_hint"
-        android:textSize="13sp" />
+            <!-- Flexi World Clock card -->
+            <LinearLayout style="@style/Card">
+
+                <TextView
+                    style="@style/CardTitle"
+                    android:text="@string/world_clock_widget_name" />
+
+                <TextView
+                    style="@style/CardCaption"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/main_world_summary" />
+
+                <Button
+                    android:id="@+id/pin_world"
+                    style="@style/PrimaryButton"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/pin_world_clock" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/main_hint"
+                style="@style/CardCaption"
+                android:layout_marginTop="20dp"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/main_hint" />
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>

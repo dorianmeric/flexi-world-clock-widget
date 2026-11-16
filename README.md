@@ -29,7 +29,9 @@ Monday 16-Nov       <- date, format EEEE d'-'MMM
 * Left-aligned, both lines vertically centred in the widget.
 * Font family and font size are configurable **separately** for the time and the date.
 * Left padding is configurable (0–64 dp).
-* Tapping the widget opens its configuration screen.
+* Background: colour, opacity and "no background" are configurable.
+* Tapping the widget opens its configuration screen; long-pressing it and choosing
+  **Edit widget** does the same from the launcher.
 
 ### Flexi World Clock (flexible width)
 
@@ -39,12 +41,24 @@ Monday 16-Nov       <- date, format EEEE d'-'MMM
    UTC+1        UTC-5         UTC+9       UTC+11    <- optional
 ```
 
-* Up to 10 timezones side by side, chosen from a searchable list of ~76 cities.
+* Up to 10 timezones side by side, chosen from a searchable list of ~78 cities
+  (including Vientiane and Dhaka).
 * City name above, `HH:mm` below, optional `UTC+8`-style label underneath.
 * Font family and size configurable for the city, the time and the UTC label.
 * Configurable gap between clocks; the columns share the remaining space so the row always spans
   the full widget width.
 * Configurable width (2–6 launcher cells) plus free horizontal/vertical resizing.
+* Timezones can be **reordered by dragging** the handle next to each row; the live preview and the
+  widget update as you drag.
+* Same background options as the clock widget.
+
+### Background
+
+Both widgets accept a colour, an opacity (5–100%) and a "no background" toggle, configured from a
+swatch strip plus an opacity slider. The background is a rounded rectangle drawn into a bitmap and
+pushed through `ImageView.setImageViewBitmap`, because a shape drawable's colour cannot be changed
+through `RemoteViews` (`setColorFilter` is not a `@RemotableViewMethod`, and
+`setBackgroundColor` would lose the rounded corners).
 
 ## Build
 
@@ -108,6 +122,7 @@ Override the defaults with `FLEXI_STORE_FILE`, `FLEXI_STORE_PASSWORD`, `FLEXI_KE
 .\scripts\install.ps1 -Uninstall   # remove the previous build first
 .\scripts\install.ps1 -Emulator    # boot the bundled AVD headless when no device is attached
 .\scripts\install.ps1 -Apk x.apk   # install a specific APK
+.\scripts\install.ps1 -Serial emulator-5554   # target one device when several are attached
 ```
 
 `install.ps1` tries `adb install --v4` first so the device can stream the install from the v4
@@ -121,13 +136,14 @@ Debug and release builds use different signing keys, so uninstall the release AP
 ## Tests
 
 ```powershell
-.\gradlew.bat :app:testReleaseUnitTest         # 2 test classes, 15 cases
-.\gradlew.bat :app:connectedDebugAndroidTest   # 9 on-device cases
+.\gradlew.bat :app:testReleaseUnitTest         # 3 test classes, 29 cases
+.\gradlew.bat :app:connectedDebugAndroidTest   # 15 on-device cases
 ```
 
 The JVM tests cover the date/time formatting (`HH:mm'-'ss`, `EEEE d'-'MMM`), the `UTC+8` /
 `UTC+5:30` label maths including daylight saving, settings JSON round-trips, clamping of invalid
-stored values, and the width arithmetic. They need `org.json:json` on the test classpath because the
+stored values, the width arithmetic, the drag-reorder index moves and the background colour/opacity
+resolution. They need `org.json:json` on the test classpath because the
 `org.json` shipped in `android.jar` is stubbed.
 
 The on-device tests cover the parts that need a real Android runtime:
@@ -137,7 +153,13 @@ The on-device tests cover the parts that need a real Android runtime:
 * a custom font measurably changes the laid-out text width, proving the span reaches rendering and is
   not just decoration on the format string;
 * columns plus gaps plus padding exactly fill the widget width;
-* left padding, font sizes, the UTC label toggle and the per-zone column count all take effect.
+* left padding, font sizes, the UTC label toggle and the per-zone column count all take effect;
+* the generated background honours colour and opacity, the rounded corners stay transparent, and the
+  layer is hidden when "no background" is chosen;
+* reordering the zones changes the order the widget renders;
+* both provider XMLs parse into an `AppWidgetProviderInfo` with a resolvable `configure` component
+  and the `WIDGET_FEATURE_RECONFIGURABLE` flag, which is what makes the launcher offer
+  **Edit widget** on long-press.
 
 ## How custom fonts work across processes
 
@@ -169,15 +191,17 @@ depending on the width the launcher reports.
 app/src/main/java/com/flexi/worldclock/
   ClockFormats.java          time/date patterns and UTC offset labels
   Fonts.java                 system font catalogue, spanned text, clock format builder
-  ZoneCatalog.java           ~76 city -> timezone entries with search
+    ZoneCatalog.java           ~78 city -> timezone entries with search
   WidgetPrefs.java           per-widget settings, persisted as JSON
+    WidgetBackground.java      colour/opacity rounded background, drawn to a bitmap
   ClockWidgetViews.java      RemoteViews builder for the 2x1 clock
   WorldClockWidgetViews.java RemoteViews builder for the world clock
   ClockWidgetProvider.java   app widget provider (clock)
   WorldClockWidgetProvider.java
+    DragReorder.java           framework drag-and-drop reordering of the zone rows
   PinWidgets.java            "add to home screen" request
   PreviewRenderer.java       applies RemoteViews in-app for the live preview
-  Ui.java                    slider/spinner plumbing
+    Ui.java                    slider/spinner/inset plumbing, background panel binding
   ClockConfigActivity.java   clock configuration screen
   WorldClockConfigActivity.java
   MainActivity.java          landing screen

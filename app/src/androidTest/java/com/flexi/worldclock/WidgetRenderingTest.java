@@ -1,6 +1,7 @@
 package com.flexi.worldclock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.appwidget.AppWidgetManager;
@@ -246,6 +247,168 @@ public class WidgetRenderingTest {
         assertEquals(Math.round(40 * density()),
                 root.findViewById(R.id.clock_content).getPaddingLeft());
     }
+
+        /** The generated background honours colour, opacity and the "no background" choice. */
+        @Test
+        public void generatedBackgroundHonoursColourAndOpacity() {
+            WidgetBackground.Settings settings = new WidgetBackground.Settings();
+            settings.color = 0xFFFF0000;
+            settings.opacity = 50;
+
+            android.graphics.Bitmap bitmap = WidgetBackground.render(settings, 40, 40, 1f);
+            assertNotNull(bitmap);
+            // Centre pixel is the fill colour with the configured alpha.
+            int pixel = bitmap.getPixel(20, 20);
+            assertEquals(0xFF0000, pixel & 0x00FFFFFF);
+            assertEquals(128, (pixel >>> 24) & 0xFF);
+            // A corner is transparent thanks to the rounded corners.
+            assertEquals(0, (bitmap.getPixel(0, 0) >>> 24) & 0xFF);
+        }
+
+        @Test
+        public void disabledBackgroundIsHiddenInTheWidget() {
+            WidgetPrefs.ClockSettings settings = WidgetPrefs.ClockSettings.defaults();
+            settings.background = WidgetBackground.Settings.none();
+
+            View root = ClockWidgetViews.build(context(), settings,
+                            AppWidgetManager.INVALID_APPWIDGET_ID,
+                            PreviewRenderer.options(148f, 56f))
+                    .apply(context(), new FrameLayout(context()));
+
+            assertEquals(View.GONE, root.findViewById(R.id.widget_background).getVisibility());
+        }
+
+        @Test
+        public void enabledBackgroundIsVisibleAndOpaque() {
+            WidgetPrefs.WorldClockSettings settings = WidgetPrefs.WorldClockSettings.defaults();
+            settings.background.color = 0xFF1B2A41;
+            settings.background.opacity = 90;
+
+            View root = WorldClockWidgetViews.build(context(), settings,
+                            AppWidgetManager.INVALID_APPWIDGET_ID,
+                            PreviewRenderer.options(300f, 56f))
+                    .apply(context(), new FrameLayout(context()));
+
+            View background = root.findViewById(R.id.widget_background);
+            assertEquals(View.VISIBLE, background.getVisibility());
+            assertNotNull(((android.widget.ImageView) background).getDrawable());
+        }
+
+        /** Dragging a zone row onto another must reorder the model the widget renders from. */
+        @Test
+        public void draggedZoneRowReordersTheModel() {
+            WidgetPrefs.WorldClockSettings settings = WidgetPrefs.WorldClockSettings.defaults();
+            settings.zones.clear();
+            settings.zones.add(new WidgetPrefs.ZoneEntry("London", "Europe/London"));
+            settings.zones.add(new WidgetPrefs.ZoneEntry("Dhaka", "Asia/Dhaka"));
+            settings.zones.add(new WidgetPrefs.ZoneEntry("Vientiane", "Asia/Vientiane"));
+
+            View root = WorldClockWidgetViews.build(context(), settings,
+                            AppWidgetManager.INVALID_APPWIDGET_ID,
+                            PreviewRenderer.options(300f, 56f))
+                    .apply(context(), new FrameLayout(context()));
+            android.view.ViewGroup row = root.findViewById(R.id.world_row);
+            assertEquals(3, row.getChildCount());
+
+            // Move Vientiane (index 2) to the front, as a drag onto the first row would.
+            DragReorder.reorder(settings.zones, 2, 0);
+            assertEquals("Vientiane", settings.zones.get(0).label);
+
+            View reordered = WorldClockWidgetViews.build(context(), settings,
+                            AppWidgetManager.INVALID_APPWIDGET_ID,
+                            PreviewRenderer.options(300f, 56f))
+                    .apply(context(), new FrameLayout(context()));
+            android.view.ViewGroup reorderedRow = reordered.findViewById(R.id.world_row);
+            TextView firstCity = reorderedRow.getChildAt(0).findViewById(R.id.zone_city);
+            assertEquals("Vientiane", firstCity.getText().toString());
+        }
+
+        /**
+         * The long-press menu offers "Edit widget" only when the provider declares a configure
+         * activity plus the reconfigurable feature, so both are asserted from the provider XML.
+         */
+        @Test
+        public void providersDeclareThemselvesReconfigurable() throws Exception {
+            assertProviderXml(R.xml.clock_widget_info, ".ClockConfigActivity");
+            assertProviderXml(R.xml.world_clock_widget_info, ".WorldClockConfigActivity");
+        }
+
+        /**
+         * End-to-end check of the same declarations through the framework: the parsed
+         * {@link android.appwidget.AppWidgetProviderInfo} the launcher reads must expose the configure
+         * component and the reconfigurable flag.
+         */
+        @Test
+        public void parsedProviderInfoExposesTheConfigureComponent() {
+            AppWidgetManager manager = AppWidgetManager.getInstance(context());
+            int checked = 0;
+            for (android.appwidget.AppWidgetProviderInfo info : manager.getInstalledProviders()) {
+                if (!info.provider.getPackageName().equals(context().getPackageName())) {
+                    continue;
+                }
+                // The launcher shows "Edit" when configure is set and reconfiguration is allowed.
+                assertNotNull("configure missing for " + info.provider, info.configure);
+                assertTrue("reconfigurable flag missing for " + info.provider,
+                        (info.widgetFeatures
+                                & android.appwidget.AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE)
+                                != 0);
+                // The configure activity must actually resolve.
+                assertNotNull("configure activity unresolvable for " + info.provider,
+                        context().getPackageManager().resolveActivity(
+                                new android.content.Intent().setComponent(info.configure), 0));
+                checked++;
+            }
+            assertEquals("expected both providers to be installed", 2, checked);
+        }
+
+        private void assertProviderXml(int xmlRes, String expectedConfigureSuffix) throws Exception {
+            org.xmlpull.v1.XmlPullParser parser = context().getResources().getXml(xmlRes);
+            String configure = null;
+            String features = null;
+            int event = parser.getEventType();
+            while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    configure = parser.getAttributeValue(
+                            "http://schemas.android.com/apk/res/android", "configure");
+                    features = parser.getAttributeValue(
+                            "http://schemas.android.com/apk/res/android", "widgetFeatures");
+                }
+                event = parser.next();
+            }
+
+            assertNotNull("configure attribute missing in " + xmlRes, configure);
+            assertTrue("configure should point at " + expectedConfigureSuffix + " but was " + configure,
+                    configure.endsWith(expectedConfigureSuffix));
+            assertNotNull("widgetFeatures missing in " + xmlRes, features);
+            // Resources are compiled, so the flag list resolves to its integer value (0x1).
+            long flags = parseFlags(features);
+            assertTrue("WIDGET_FEATURE_RECONFIGURABLE missing in " + xmlRes + ": " + features,
+                    (flags & android.appwidget.AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE)
+                            != 0);
+        }
+
+        /** Reads a compiled flag attribute, accepting both the raw and the symbolic form. */
+        private long parseFlags(String value) {
+            if (value == null) {
+                return 0;
+            }
+            String text = value.trim();
+            if (text.startsWith("0x") || text.startsWith("0X")) {
+                return Long.parseLong(text.substring(2), 16);
+            }
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException e) {
+                // Symbolic form, e.g. "reconfigurable".
+                long flags = 0;
+                for (String part : text.split("\\|")) {
+                    if (part.trim().equals("reconfigurable")) {
+                        flags |= android.appwidget.AppWidgetProviderInfo.WIDGET_FEATURE_RECONFIGURABLE;
+                    }
+                }
+                return flags;
+            }
+        }
 
     private float density() {
         return context().getResources().getDisplayMetrics().density;

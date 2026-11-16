@@ -17,10 +17,15 @@ final class ClockWidgetViews {
     }
 
     static RemoteViews build(Context context, int appWidgetId) {
-        return build(context, WidgetPrefs.loadClock(context, appWidgetId), appWidgetId);
+            return build(context, WidgetPrefs.loadClock(context, appWidgetId), appWidgetId, null);
     }
 
     static RemoteViews build(Context context, WidgetPrefs.ClockSettings settings, int appWidgetId) {
+            return build(context, settings, appWidgetId, null);
+        }
+
+        static RemoteViews build(Context context, WidgetPrefs.ClockSettings settings, int appWidgetId,
+                Bundle options) {
         String pkg = context.getPackageName();
         RemoteViews views = new RemoteViews(pkg, R.layout.clock_widget);
 
@@ -34,6 +39,10 @@ final class ClockWidgetViews {
                 TypedValue.COMPLEX_UNIT_DIP, settings.verticalPaddingDp,
                 context.getResources().getDisplayMetrics()));
         views.setViewPadding(R.id.clock_content, left, vertical, 0, vertical);
+
+                WidgetBackground.apply(views, R.id.widget_background, settings.background,
+                        widgetWidthPx(context, options), widgetHeightPx(context, options),
+                        context.getResources().getDisplayMetrics().density);
 
         if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             views.setOnClickPendingIntent(R.id.clock_root, configIntent(context, appWidgetId));
@@ -51,6 +60,27 @@ final class ClockWidgetViews {
         views.setTextViewTextSize(viewId, TypedValue.COMPLEX_UNIT_SP, style.sizeSp);
     }
 
+    /**
+     * Width of the 2x1 widget in px. The launcher's reported width wins; the configured 2-cell
+     * width is the fallback used for in-app previews.
+     */
+    static int widgetWidthPx(Context context, Bundle options) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int reported = options == null ? 0
+                : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
+        float widthDp = reported > 0 ? reported : 2 * WorldClockWidgetViews.CELL_DP;
+        return Math.max(1, Math.round(widthDp * density));
+    }
+
+    /** Height of the single-row widget in px, from the launcher's options. */
+    static int widgetHeightPx(Context context, Bundle options) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int reported = options == null ? 0
+                : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
+        float heightDp = reported > 0 ? reported : 56f;
+        return Math.max(1, Math.round(heightDp * density));
+    }
+
     static PendingIntent configIntent(Context context, int appWidgetId) {
         Intent intent = new Intent(context, ClockConfigActivity.class);
         intent.setAction(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE);
@@ -61,15 +91,18 @@ final class ClockWidgetViews {
     }
 
     static void updateNow(Context context, int appWidgetId) {
-            AppWidgetManager.getInstance(context)
-                    .updateAppWidget(appWidgetId, build(context, appWidgetId));
+            AppWidgetManager manager = AppWidgetManager.getInstance(context);
+            manager.updateAppWidget(appWidgetId, build(context,
+                    WidgetPrefs.loadClock(context, appWidgetId), appWidgetId,
+                    manager.getAppWidgetOptions(appWidgetId)));
     }
 
     static void updateAll(Context context) {
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         int[] ids = manager.getAppWidgetIds(new ComponentName(context, ClockWidgetProvider.class));
         for (int id : ids) {
-            manager.updateAppWidget(id, build(context, id));
+                manager.updateAppWidget(id, build(context, WidgetPrefs.loadClock(context, id), id,
+                        manager.getAppWidgetOptions(id)));
         }
     }
 }

@@ -3,20 +3,30 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:paddingStart="20dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="8dp">
 
     <EditText
         android:id="@+id/zone_search"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/bg_search_field"
         android:hint="@string/search_hint"
         android:imeOptions="actionSearch"
         android:inputType="text"
-        android:singleLine="true" />
+        android:singleLine="true"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_tertiary"
+        android:textSize="14sp" />
 
     <ListView
         android:id="@+id/zone_results"
         android:layout_width="match_parent"
-        android:layout_height="320dp"
-        android:layout_marginTop="8dp" />
+        android:layout_height="340dp"
+        android:layout_marginTop="10dp"
+        android:divider="@color/divider"
+        android:dividerHeight="1dp"
+        android:scrollbars="none" />
 </LinearLayout>

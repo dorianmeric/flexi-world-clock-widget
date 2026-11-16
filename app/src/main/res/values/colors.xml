@@ -1,8 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#FF0F2A44</color>
-    <color name="accent">#FF2E9BD6</color>
+    <!-- Brand / accents -->
+    <color name="brand">#FF111827</color>
+    <color name="brand_surface">#FF0B1220</color>
+    <color name="accent">#FF3B82F6</color>
+    <color name="accent_pressed">#FF2563EB</color>
 
+    <!-- Settings screens -->
+    <color name="surface">#FFF7F8FA</color>
+    <color name="card">#FFFFFFFF</color>
+    <color name="card_border">#FFE6E9EF</color>
+    <color name="divider">#FFEDF0F4</color>
+    <color name="text_primary">#FF111827</color>
+    <color name="text_secondary">#FF6B7280</color>
+    <color name="text_tertiary">#FF9CA3AF</color>
+    <color name="on_accent">#FFFFFFFF</color>
+    <color name="button_secondary">#FFEFF1F5</color>
+    <color name="danger">#FFDC2626</color>
+
+    <!-- Widget defaults -->
     <color name="widget_background">#CC12161C</color>
     <color name="widget_time_text">#FFFFFFFF</color>
     <color name="widget_date_text">#FFB9C4D1</color>
@@ -10,6 +26,5 @@
     <color name="widget_zone_time_text">#FFFFFFFF</color>
     <color name="widget_offset_text">#FF9AA7B6</color>
 
-    <color name="surface">#FFF6F8FA</color>
-    <color name="ic_launcher_background">#FF0F2A44</color>
+    <color name="ic_launcher_background">#FF111827</color>
 </resources>

@@ -62,6 +62,11 @@ final class WorldClockWidgetViews {
 
         views.setViewPadding(R.id.world_row, horizontal, vertical, horizontal, vertical);
 
+                WidgetBackground.apply(views, R.id.widget_background, settings.background,
+                        ClockWidgetViews.widgetWidthPx(context, options),
+                        widgetHeightPx(context, options, 56f),
+                        context.getResources().getDisplayMetrics().density);
+
         if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             views.setOnClickPendingIntent(R.id.world_root, configIntent(context, appWidgetId));
         }
@@ -102,6 +107,15 @@ final class WorldClockWidgetViews {
     static float configuredWidthDp(WidgetPrefs.WorldClockSettings settings) {
         return settings.widthCells * CELL_DP;
     }
+
+        /** Height of the widget in px, preferring the launcher's reported height. */
+        private static int widgetHeightPx(Context context, Bundle options, float fallbackDp) {
+            float density = context.getResources().getDisplayMetrics().density;
+            int reported = options == null ? 0
+                    : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
+            float heightDp = reported > 0 ? reported : fallbackDp;
+            return Math.max(1, Math.round(heightDp * density));
+        }
 
     static PendingIntent configIntent(Context context, int appWidgetId) {
         Intent intent = new Intent(context, WorldClockConfigActivity.class);

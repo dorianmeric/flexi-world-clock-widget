@@ -11,8 +11,11 @@ public class ClockWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
         for (int appWidgetId : appWidgetIds) {
+                // The options carry the width/height the launcher will grant, which sizes the
+                // generated background bitmap.
             appWidgetManager.updateAppWidget(appWidgetId,
-                    ClockWidgetViews.build(context, appWidgetId));
+                        ClockWidgetViews.build(context, WidgetPrefs.loadClock(context, appWidgetId),
+                                appWidgetId, appWidgetManager.getAppWidgetOptions(appWidgetId)));
         }
     }
 
@@ -20,7 +23,8 @@ public class ClockWidgetProvider extends AppWidgetProvider {
     public void onAppWidgetOptionsChanged(Context context, AppWidgetManager appWidgetManager,
             int appWidgetId, Bundle newOptions) {
         appWidgetManager.updateAppWidget(appWidgetId,
-                ClockWidgetViews.build(context, appWidgetId));
+                    ClockWidgetViews.build(context, WidgetPrefs.loadClock(context, appWidgetId),
+                            appWidgetId, newOptions));
     }
 
     @Override

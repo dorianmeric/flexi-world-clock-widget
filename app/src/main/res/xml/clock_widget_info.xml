@@ -11,4 +11,6 @@
     android:targetCellWidth="2"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
+        android:configure="com.flexi.worldclock.ClockConfigActivity"
+        android:widgetFeatures="reconfigurable"
     android:widgetCategory="home_screen" />

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One selectable colour swatch; the fill colour is set at runtime. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="10dp"
+    android:background="@drawable/bg_swatch_ring"
+    android:clickable="true"
+    android:focusable="true"
+    android:padding="4dp">
+
+    <View
+        android:id="@+id/swatch_fill"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@drawable/bg_swatch_fill" />
+</FrameLayout>

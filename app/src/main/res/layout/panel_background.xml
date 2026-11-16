@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Background editor shared by both configuration screens. The swatch strip is populated at
+    runtime from WidgetBackground.PRESET_COLORS so the palette lives in one place.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Card"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/CardTitle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/section_background" />
+
+        <CheckBox
+            android:id="@+id/background_none"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/background_none"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/background_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/SectionLabel"
+            android:layout_marginTop="14dp"
+            android:text="@string/background_color" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/background_swatches"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            style="@style/SectionLabel"
+            android:text="@string/background_opacity" />
+
+        <SeekBar
+            android:id="@+id/background_opacity"
+            style="@style/ValueSlider" />
+
+        <TextView
+            android:id="@+id/background_opacity_value"
+            style="@style/ValueLabel" />
+    </LinearLayout>
+</LinearLayout>

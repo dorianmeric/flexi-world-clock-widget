@@ -21,6 +21,9 @@ public class ClockConfigActivity extends Activity {
     private static final int MAX_DATE_SP = 44;
     private static final int MAX_LEFT_PADDING_DP = 64;
 
+    /** Height the 2x1 widget occupies on a launcher grid, used for the preview. */
+    private static final float CLOCK_PREVIEW_HEIGHT_DP = 56f;
+
     private int appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private boolean confirmed;
     private WidgetPrefs.ClockSettings settings;
@@ -38,10 +41,10 @@ public class ClockConfigActivity extends Activity {
         }
 
         setContentView(R.layout.activity_clock_config);
+        Ui.applyStatusBarInset(findViewById(R.id.screen_root));
         setTitle(R.string.clock_config_title);
         settings = WidgetPrefs.loadClock(this, appWidgetId);
         previewHost = findViewById(R.id.preview_host);
-        previewHost.setPadding(8, 8, 8, 8);
 
         bindFont(R.id.time_font, settings.time.family,
                 family -> settings.time.family = family);
@@ -67,6 +70,11 @@ public class ClockConfigActivity extends Activity {
 
         findViewById(R.id.save).setOnClickListener(v -> save());
         findViewById(R.id.cancel).setOnClickListener(v -> finish());
+
+                Ui.bindBackground(getWindow().getDecorView(), settings.background, background -> {
+                            settings.background = background;
+                            renderPreview();
+                        });
         renderPreview();
     }
 
@@ -92,8 +100,11 @@ public class ClockConfigActivity extends Activity {
             return;
         }
         PreviewRenderer.show(previewHost,
-                ClockWidgetViews.build(this, settings, AppWidgetManager.INVALID_APPWIDGET_ID),
-                WorldClockWidgetViews.CELL_DP * 2f);
+                        ClockWidgetViews.build(this, settings, AppWidgetManager.INVALID_APPWIDGET_ID,
+                                PreviewRenderer.options(
+                                        WorldClockWidgetViews.CELL_DP * 2f,
+                                        CLOCK_PREVIEW_HEIGHT_DP)),
+                        WorldClockWidgetViews.CELL_DP * 2f);
     }
 
     private void save() {

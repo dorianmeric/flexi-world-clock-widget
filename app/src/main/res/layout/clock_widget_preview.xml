@@ -4,7 +4,8 @@
     itself, so it shows a fixed sample time instead of a live clock.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
+    android:id="@+id/clock_preview_root"
+        android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background">
 

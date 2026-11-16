@@ -1,27 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    One timezone row. The handle starts a drag-and-drop reorder; the city part opens the picker.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/bg_zone_row"
     android:gravity="center_vertical"
     android:orientation="horizontal"
+    android:paddingStart="6dp"
     android:paddingTop="4dp"
+    android:paddingEnd="6dp"
     android:paddingBottom="4dp">
 
-    <Button
-        android:id="@+id/zone_remove"
-        style="?android:attr/buttonStyleSmall"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:contentDescription="@string/remove_timezone"
-        android:minWidth="40dp"
-        android:text="✕" />
+    <ImageView
+        android:id="@+id/zone_handle"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_list_item"
+        android:contentDescription="@string/drag_handle"
+        android:padding="11dp"
+        android:src="@drawable/ic_drag_handle" />
 
-    <Button
+    <LinearLayout
         android:id="@+id/zone_pick"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:gravity="start|center_vertical"
-        android:textAllCaps="false" />
+        android:background="@drawable/bg_list_item"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="44dp"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/zone_city_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/zone_meta_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/zone_remove"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_list_item"
+        android:contentDescription="@string/remove_timezone"
+        android:padding="11dp"
+        android:src="@drawable/ic_close" />
 </LinearLayout>

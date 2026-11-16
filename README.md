@@ -114,6 +114,46 @@ keytool -genkeypair -v -keystore keystore/flexi-release.jks -alias flexi `
 Override the defaults with `FLEXI_STORE_FILE`, `FLEXI_STORE_PASSWORD`, `FLEXI_KEY_ALIAS` and
 `FLEXI_KEY_PASSWORD`.
 
+## Releasing
+
+`.github/workflows/release.yml` publishes a signed APK as a GitHub release. It runs in two jobs:
+
+1. **verify** — boots an API 35 emulator and runs `:app:connectedDebugAndroidTest` (the 15 on-device
+   cases), so a tag cannot publish if the widgets stop inflating in a real launcher.
+2. **release** — runs the unit tests, then `scripts/build.sh` to build, sign (v2 + v3 + v4) and
+   verify, asserts the signature schemes and the version, and creates the release with the APK, its
+   `.idsig` v4 sidecar and `SHA256SUMS.txt`.
+
+Publish by pushing a semantic-version tag:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The tag drives the build: `v0.1.0` becomes `versionName 0.1.0` and `versionCode 100`
+(`major * 10000 + minor * 100 + patch`), passed to Gradle through `-PversionName` /
+`-PversionCode`. Locally, `.\scripts\build.ps1 -VersionName 0.1.0 -VersionCode 100` does the same.
+
+The workflow can also be run by hand from **Actions → Release → Run workflow** with an explicit tag;
+clear the `publish` checkbox for a dry run that stops after uploading the `release-assets` artifact.
+
+### Signing secrets
+
+The keystore is git-ignored, so CI needs it in repository secrets. Put the `base64` of the keystore
+in `SIGNING_KEYSTORE_BASE64` and add the three passphrase secrets:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('keystore/flexi-release.jks')) | Set-Clipboard
+gh secret set SIGNING_KEYSTORE_BASE64            # paste, then Ctrl-Z Enter
+gh secret set SIGNING_STORE_PASSWORD
+gh secret set SIGNING_KEY_ALIAS                  # flexi
+gh secret set SIGNING_KEY_PASSWORD
+```
+
+Without `SIGNING_KEYSTORE_BASE64` the workflow still succeeds but logs a warning and signs with an
+ephemeral key, which produces an APK that cannot update an install signed with a different key.
+
 ## Install on a connected device
 
 ```powershell

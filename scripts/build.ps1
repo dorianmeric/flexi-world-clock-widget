@@ -8,12 +8,15 @@
 #   .\scripts\build.ps1 -Clean          # wipe intermediates first
 #   .\scripts\build.ps1 -Test           # also run the JVM unit tests
 #   .\scripts\build.ps1 -NoSign         # only assemble the unsigned APK
+#   .\scripts\build.ps1 -VersionName 0.1.0 -VersionCode 100   # override the manifest version
 
 [CmdletBinding()]
 param(
     [switch]$Clean,
     [switch]$Test,
-    [switch]$NoSign
+    [switch]$NoSign,
+    [string]$VersionName,
+    [string]$VersionCode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,8 +60,14 @@ if ($Clean) {
     Invoke-Step 'Gradle clean' { & (Join-Path $repoRoot 'gradlew.bat') clean --console=plain }
 }
 
+# Optional -P overrides, so a release tag can drive versionName/versionCode.
+$versionArgs = @()
+if ($VersionName) { $versionArgs += "-PversionName=$VersionName" }
+if ($VersionCode) { $versionArgs += "-PversionCode=$VersionCode" }
+if ($versionArgs.Count) { Write-Host "  Version    : $VersionName ($VersionCode)" }
+
 Invoke-Step 'Gradle assembleRelease' {
-    & (Join-Path $repoRoot 'gradlew.bat') ':app:assembleRelease' --console=plain
+    & (Join-Path $repoRoot 'gradlew.bat') ':app:assembleRelease' --console=plain @versionArgs
 }
 
 if ($Test) {

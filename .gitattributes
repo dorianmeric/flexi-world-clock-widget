@@ -1,0 +1,11 @@
+# Shell entry points must keep LF endings, otherwise they fail on the Linux CI runner
+# with "bad interpreter: /usr/bin/env bash^M".
+gradlew       text eol=lf
+*.sh          text eol=lf
+*.bat         text eol=crlf
+*.ps1         text eol=crlf
+
+*.jar         binary
+*.jks         binary
+*.apk         binary
+*.idsig       binary

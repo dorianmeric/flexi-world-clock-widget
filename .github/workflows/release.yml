@@ -1,0 +1,269 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish, for example v0.1.0'
+        required: true
+        type: string
+      publish:
+        description: 'Create the GitHub release (turn off for a dry run)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+  BUILD_TOOLS: /usr/local/lib/android/sdk/build-tools/35.0.0
+
+jobs:
+  verify:
+    name: Instrumented tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the on-device suite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none
+          script: ./gradlew :app:connectedDebugAndroidTest --console=plain
+
+  release:
+    name: Build, sign and publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # A tag such as v0.1.0 becomes versionName 0.1.0 and versionCode 100, so every
+      # release is a valid, monotonically increasing upgrade.
+      - name: Resolve the release version
+        id: version
+        env:
+          RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${RAW_TAG:-}"
+          [[ -n "$tag" ]] || { echo "::error::No tag supplied."; exit 1; }
+          if [[ "$tag" != v* ]]; then tag="v$tag"; fi
+          version="${tag#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$tag' is not a semantic version such as v0.1.0."
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$version"
+          code=$(( major * 10000 + minor * 100 + patch ))
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag -> versionName $version, versionCode $code"
+
+      # The keystore is git-ignored, so CI restores it from repository secrets and
+      # otherwise falls back to an ephemeral key, with a loud warning.
+      - name: Provide the signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p keystore
+          store_password="${STORE_PASSWORD:-flexiwidget}"
+          key_alias="${KEY_ALIAS:-flexi}"
+          key_password="${KEY_PASSWORD:-flexiwidget}"
+          if [[ -n "$STORE_PASSWORD" ]]; then echo "::add-mask::$STORE_PASSWORD"; fi
+          if [[ -n "$KEY_PASSWORD" ]]; then echo "::add-mask::$KEY_PASSWORD"; fi
+
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > keystore/flexi-release.jks
+            echo "Using the release keystore from repository secrets."
+          elif [[ -f keystore/flexi-release.jks ]]; then
+            echo "Using the release keystore found in the checkout."
+          else
+            echo "::warning::Neither SIGNING_KEYSTORE_BASE64 nor a committed keystore is present."
+            echo "::warning::Signing with an ephemeral key; this APK cannot update an install signed with another key."
+            keytool -genkeypair -v -keystore keystore/flexi-release.jks -alias "$key_alias" \
+              -keyalg RSA -keysize 4096 -validity 10950 -storetype PKCS12 \
+              -storepass "$store_password" -keypass "$key_password" \
+              -dname "CN=Flexi World-Clock Widget, OU=Widgets, O=Flexi, L=Berlin, C=DE"
+          fi
+
+          {
+            echo "FLEXI_STORE_FILE=keystore/flexi-release.jks"
+            echo "FLEXI_STORE_PASSWORD=$store_password"
+            echo "FLEXI_KEY_ALIAS=$key_alias"
+            echo "FLEXI_KEY_PASSWORD=$key_password"
+          } >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        run: ./gradlew :app:testReleaseUnitTest --console=plain
+
+      # Writes dist/flexi-world-clock-widget.apk plus the .apk.idsig v4 sidecar, and
+      # verifies v2/v3 through apksigner and v4 through scripts/V4Verifier.
+      - name: Build and sign (v2 + v3 + v4)
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          ORG_GRADLE_PROJECT_versionName="$VERSION_NAME" \
+            ORG_GRADLE_PROJECT_versionCode="$VERSION_CODE" \
+            ./scripts/build.sh | tee build.log
+          grep -E '^v[234]: ' build.log
+
+      - name: Assert the signature schemes and the version
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          apk=dist/flexi-world-clock-widget.apk
+          [[ -f "$apk.idsig" ]] || { echo "::error::No v4 signature sidecar was produced."; exit 1; }
+
+          "$BUILD_TOOLS/apksigner" verify --verbose --min-sdk-version 24 "$apk" > verify.txt
+          cat verify.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' verify.txt \
+            || { echo "::error::v2 signature missing."; exit 1; }
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' verify.txt \
+            || { echo "::error::v3 signature missing."; exit 1; }
+          # v4 cannot be checked by the apksigner CLI; scripts/V4Verifier prints "v4: true".
+          grep -qx 'v4: true' build.log \
+            || { echo "::error::v4 signature missing."; exit 1; }
+
+          badging="$("$BUILD_TOOLS/aapt2" dump badging "$apk" | head -n 1)"
+          echo "$badging"
+          grep -q "versionCode='$VERSION_CODE'" <<< "$badging" \
+            || { echo "::error::versionCode is not $VERSION_CODE."; exit 1; }
+          grep -q "versionName='$VERSION_NAME'" <<< "$badging" \
+            || { echo "::error::versionName is not $VERSION_NAME."; exit 1; }
+
+      - name: Collect the release assets
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          out=release-assets
+          mkdir -p "$out"
+          apk="$out/flexi-world-clock-widget-$VERSION_NAME.apk"
+          cp dist/flexi-world-clock-widget.apk "$apk"
+          cp dist/flexi-world-clock-widget.apk.idsig "$apk.idsig"
+          ( cd "$out" && sha256sum ./* > SHA256SUMS.txt && cat SHA256SUMS.txt )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build the release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Flexi World-Clock Widget $TAG"
+            echo
+            echo "versionName \`$VERSION_NAME\`, versionCode \`$VERSION_CODE\`."
+            echo
+            echo "### Download"
+            echo
+            echo '| File | Purpose |'
+            echo '| --- | --- |'
+            echo "| \`flexi-world-clock-widget-$VERSION_NAME.apk\` | Signed APK (v2 + v3 + v4) |"
+            echo "| \`flexi-world-clock-widget-$VERSION_NAME.apk.idsig\` | APK Signature Scheme v4 sidecar |"
+            echo '| `SHA256SUMS.txt` | Checksums for both files |'
+            echo
+            echo "### Install"
+            echo
+            echo '```bash'
+            echo "adb install -r flexi-world-clock-widget-$VERSION_NAME.apk"
+            echo '```'
+            echo
+            echo 'Then long-press the home screen, choose **Widgets**, and pick either'
+            echo '**Flexi Clock** or **Flexi World Clock**.'
+            echo
+            echo '---'
+            echo
+            echo '### Changes'
+          } > notes.md
+          previous="$(git describe --tags --abbrev=0 --exclude "$TAG" 2>/dev/null || true)"
+          if [[ -n "$previous" ]]; then
+            git log --no-decorate --pretty='- %s (%h)' "$previous..HEAD" >> notes.md
+          else
+            git log --no-decorate --pretty='- %s (%h)' >> notes.md
+          fi
+          cat notes.md
+
+      - name: Create the GitHub release
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --title "Flexi World-Clock Widget $VERSION_NAME" \
+            --notes-file notes.md \
+            --latest \
+            "release-assets/flexi-world-clock-widget-$VERSION_NAME.apk" \
+            "release-assets/flexi-world-clock-widget-$VERSION_NAME.apk.idsig" \
+            "release-assets/SHA256SUMS.txt"
+          gh release view "$TAG" --json url --jq .url

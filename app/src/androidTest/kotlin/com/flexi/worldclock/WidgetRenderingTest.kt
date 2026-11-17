@@ -5,20 +5,26 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Parcel
 import android.text.Spanned
 import android.text.format.DateFormat
 import android.text.style.TypefaceSpan
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.RemoteViews
 import android.widget.TextClock
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -355,6 +361,68 @@ class WidgetRenderingTest {
         val firstCity = reorderedRow.getChildAt(0).findViewById<TextView>(R.id.zone_city)
         assertEquals("Vientiane", firstCity.text.toString())
     }
+
+    /**
+     * The dotted outline keys on the row's activated flag, so only the row being dragged may carry
+     * it — and it has to come off again when the drag ends.
+     */
+    @Test
+    fun onlyTheDraggedRowIsHighlighted() {
+        val container = LinearLayout(context())
+        repeat(3) { container.addView(View(context())) }
+
+        DragReorder.highlight(container, 1)
+        assertFalse(container.getChildAt(0).isActivated)
+        assertTrue(container.getChildAt(1).isActivated)
+        assertFalse(container.getChildAt(2).isActivated)
+
+        DragReorder.highlight(container, -1)
+        for (i in 0 until container.childCount) {
+            assertFalse(container.getChildAt(i).isActivated)
+        }
+    }
+
+    /**
+     * The activated flag has to reach a visibly dotted outline, or the drag cue never shows. The
+     * row's background is rendered to a bitmap and its top edge walked: some accent pixels prove the
+     * outline is drawn, and their number being short of the width proves it is dashed, not solid.
+     */
+    @Test
+    fun activatedRowDrawsADottedOutline() {
+        val row = LayoutInflater.from(context())
+            .inflate(R.layout.item_zone_row, LinearLayout(context()), false)
+        val background = row.background
+        assertTrue("row background should be a state list", background is StateListDrawable)
+
+        row.isActivated = false
+        val idle = background.current
+        row.isActivated = true
+        val active = background.current
+        assertTrue("activated state should pick a different drawable", active !== idle)
+
+        val accent = context().getColor(R.color.accent)
+        val size = 160
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        (active as GradientDrawable).setBounds(0, 0, size, size)
+        active.draw(Canvas(bitmap))
+
+        // The 2dp stroke straddles the edge, so the first pixel row inside it carries the outline.
+        var accentPixels = 0
+        for (x in 0 until size) {
+            val pixel = bitmap.getPixel(x, 1)
+            val nearAccent = channel(pixel, 16, accent) &&
+                channel(pixel, 8, accent) &&
+                channel(pixel, 0, accent) &&
+                (pixel ushr 24) > 120
+            if (nearAccent) accentPixels++
+        }
+        assertTrue("expected an accent outline, found $accentPixels", accentPixels > 0)
+        assertTrue("outline should be dotted, not solid: $accentPixels of $size", accentPixels < size)
+    }
+
+    /** Whether [pixel]'s channel at [shift] is close enough to [reference] to count as the same colour. */
+    private fun channel(pixel: Int, shift: Int, reference: Int): Boolean =
+        kotlin.math.abs(((pixel shr shift) and 0xFF) - ((reference shr shift) and 0xFF)) < 48
 
     /**
      * The long-press menu offers "Edit widget" only when the provider declares a configure activity

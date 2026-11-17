@@ -12,7 +12,7 @@ android {
         minSdk 31
         targetSdk 35
         // CI overrides these from the release tag, for example tag v0.1.0 -> versionCode 100.
-                def releaseVersionCode = (findProperty('versionCode') ?: '1') as int
+                def releaseVersionCode = (findProperty('versionCode') ?: '100') as int
                 def releaseVersionName = (findProperty('versionName') ?: '1.0') as String
                 versionCode releaseVersionCode
                 versionName releaseVersionName

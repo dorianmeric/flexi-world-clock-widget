@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 android {
@@ -43,6 +44,14 @@ android {
     lint {
         abortOnError false
         checkReleaseBuilds false
+    }
+}
+
+// All sources are Kotlin; the Java target in compileOptions is kept only so the Java and Kotlin
+// compilations agree on 17 (AGP fails the build when the two targets differ).
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

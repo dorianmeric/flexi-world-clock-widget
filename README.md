@@ -1,14 +1,14 @@
 # Flexi World-Clock Widget
 
-Two flexible Android home-screen widgets in one APK, built from scratch with framework views only
-(no Kotlin, no Compose, no AndroidX UI) so that `RemoteViews` inflates cleanly inside the launcher
-process.
+Two flexible Android home-screen widgets in one APK, written in Kotlin against framework views only
+(no Compose, no AndroidX UI) so that `RemoteViews` inflates cleanly inside the launcher process.
 
 ## Requirements
 
 | Tool | Version |
 | --- | --- |
 | JDK | 21 (Android Studio's bundled JBR works) |
+| Kotlin | 2.0.20 (`org.jetbrains.kotlin.android`) |
 | Android SDK | build-tools 35.0.0, platform 35 |
 | Gradle | 8.7 via the wrapper |
 | min SDK | 31 |
@@ -176,14 +176,16 @@ Debug and release builds use different signing keys, so uninstall the release AP
 ## Tests
 
 ```powershell
-.\gradlew.bat :app:testReleaseUnitTest         # 3 test classes, 29 cases
+.\gradlew.bat :app:testReleaseUnitTest         # 4 test classes, 33 cases
 .\gradlew.bat :app:connectedDebugAndroidTest   # 15 on-device cases
 ```
 
 The JVM tests cover the date/time formatting (`HH:mm'-'ss`, `EEEE d'-'MMM`), the `UTC+8` /
 `UTC+5:30` label maths including daylight saving, settings JSON round-trips, clamping of invalid
 stored values, the width arithmetic, the drag-reorder index moves and the background colour/opacity
-resolution. They need `org.json:json` on the test classpath because the
+resolution. `PersistedFormatTest` additionally pins the stored JSON *contract* — key names, value
+types and the number encoding — because a change there would silently reset every existing user's
+widget on upgrade. They need `org.json:json` on the test classpath because the
 `org.json` shipped in `android.jar` is stubbed.
 
 The on-device tests cover the parts that need a real Android runtime:
@@ -228,27 +230,29 @@ depending on the width the launcher reports.
 ## Project layout
 
 ```
-app/src/main/java/com/flexi/worldclock/
-  ClockFormats.java          time/date patterns and UTC offset labels
-  Fonts.java                 system font catalogue, spanned text, clock format builder
-    ZoneCatalog.java           ~78 city -> timezone entries with search
-  WidgetPrefs.java           per-widget settings, persisted as JSON
-    WidgetBackground.java      colour/opacity rounded background, drawn to a bitmap
-  ClockWidgetViews.java      RemoteViews builder for the 2x1 clock
-  WorldClockWidgetViews.java RemoteViews builder for the world clock
-  ClockWidgetProvider.java   app widget provider (clock)
-  WorldClockWidgetProvider.java
-    DragReorder.java           framework drag-and-drop reordering of the zone rows
-  PinWidgets.java            "add to home screen" request
-  PreviewRenderer.java       applies RemoteViews in-app for the live preview
-    Ui.java                    slider/spinner/inset plumbing, background panel binding
-  ClockConfigActivity.java   clock configuration screen
-  WorldClockConfigActivity.java
-  MainActivity.java          landing screen
+app/src/main/kotlin/com/flexi/worldclock/
+  ClockFormats.kt            time/date patterns and UTC offset labels
+  Fonts.kt                   system font catalogue, spanned text, clock format builder
+    ZoneCatalog.kt             ~78 city -> timezone entries with search
+  WidgetPrefs.kt             per-widget settings, persisted as JSON
+    WidgetBackground.kt        colour/opacity rounded background, drawn to a bitmap
+  ClockWidgetViews.kt        RemoteViews builder for the 2x1 clock
+  WorldClockWidgetViews.kt   RemoteViews builder for the world clock
+  ClockWidgetProvider.kt     app widget provider (clock)
+  WorldClockWidgetProvider.kt
+    DragReorder.kt             framework drag-and-drop reordering of the zone rows
+  PinWidgets.kt              "add to home screen" request
+  PreviewRenderer.kt         applies RemoteViews in-app for the live preview
+    Ui.kt                      slider/spinner/inset plumbing, background panel binding
+  ClockConfigActivity.kt     clock configuration screen
+  WorldClockConfigActivity.kt
+  MainActivity.kt            landing screen
+app/src/test/kotlin/         JVM unit tests (ClockFormats, WidgetBackground, WorldClockSettings)
+app/src/androidTest/kotlin/  on-device rendering and provider-declaration checks
 scripts/
   build.ps1, build.sh        build + zipalign + sign (v2/v3/v4) + verify
   install.ps1, install.sh    adb install (+ --v4 with fallback)
-  V4Verifier.java            proves the v4 signature via the apksigner library
+  V4Verifier.java            proves the v4 signature via the apksigner library (build tooling)
 ```
 
 ## Licence

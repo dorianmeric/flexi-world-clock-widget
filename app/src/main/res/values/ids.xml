@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tag key holding the row index of the row currently being dragged. -->
-    <item name="drag_from_index" type="id" />
     <!-- Tag key holding the pending pre-draw listener that starts a row slide. -->
     <item name="drag_slide_listener" type="id" />
 </resources>

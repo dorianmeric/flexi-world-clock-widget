@@ -32,6 +32,7 @@ class WorldClockConfigActivity : Activity() {
     private var confirmed = false
     private lateinit var settings: WidgetPrefs.WorldClockSettings
     private lateinit var zoneList: LinearLayout
+    private lateinit var zoneReorder: DragReorder
     private lateinit var zonesHeader: TextView
     private var previewHost: FrameLayout? = null
 
@@ -132,7 +133,12 @@ class WorldClockConfigActivity : Activity() {
             renderPreview()
         }
 
-        DragReorder.attach(zoneList, settings.zones, ::onOrderChanged)
+        zoneReorder = DragReorder(
+            container = zoneList,
+            order = settings.zones,
+            onPreview = ::renderPreview,
+            onReordered = ::onOrderChanged,
+        )
         renderZoneList()
         renderPreview()
     }
@@ -151,15 +157,18 @@ class WorldClockConfigActivity : Activity() {
         }
     }
 
-    /** Called live while the user drags a row, and once when the drag ends. */
+    /**
+     * Called once the finger has lifted and the rows have taken the order the drag previewed. The
+     * rows keep their views but have to show the data of the order they now stand in.
+     */
     private fun onOrderChanged() {
-        // The dragged row's own view must not be rebuilt mid-gesture, so only the labels of the
-        // already-swapped rows and the widget preview are refreshed.
         refreshZoneLabels()
         renderPreview()
     }
 
     private fun renderZoneList() {
+        // The rows are about to be replaced, so a drag still holding one of them has to end first.
+        zoneReorder.cancelDrag()
         zoneList.removeAllViews()
         if (settings.zones.isEmpty()) {
             zoneList.addView(
@@ -179,7 +188,7 @@ class WorldClockConfigActivity : Activity() {
             settings.zones.size < WidgetPrefs.WorldClockSettings.MAX_ZONES
     }
 
-    /** Creates one row; the drag handle needs the index, so rows are built here. */
+    /** Creates one row; the labels need the index, so rows are built here. */
     private fun buildZoneRow(index: Int, now: Long): View {
         val zone = settings.zones[index]
         val row = LayoutInflater.from(this).inflate(R.layout.item_zone_row, zoneList, false)
@@ -187,17 +196,38 @@ class WorldClockConfigActivity : Activity() {
         row.findViewById<TextView>(R.id.zone_city_label).text = zone.label
         row.findViewById<TextView>(R.id.zone_meta_label).text = zoneMeta(zone, now)
 
-        row.findViewById<View>(R.id.zone_pick).setOnClickListener { showPicker(index) }
-        row.findViewById<View>(R.id.zone_remove).setOnClickListener {
-            settings.zones.removeAt(index)
-            renderZoneList()
-            renderPreview()
+        row.findViewById<View>(R.id.zone_pick).setOnClickListener {
+            val slot = currentSlot(row)
+            if (slot >= 0) {
+                showPicker(slot)
+            }
         }
-        DragReorder.markHandle(row.findViewById(R.id.zone_handle), index)
+        row.findViewById<View>(R.id.zone_remove).setOnClickListener {
+            val slot = currentSlot(row)
+            if (slot in settings.zones.indices) {
+                settings.zones.removeAt(slot)
+                renderZoneList()
+                renderPreview()
+            }
+        }
+        zoneReorder.markHandle(row)
         return row
     }
 
-    /** After a drag the rows keep their views but must show the new order's data. */
+    /**
+     * Slot a row stands in right now. A drag moves rows under the buttons that belong to them, so
+     * the buttons look their slot up when they run rather than when the row was built; a drag still
+     * in flight is ended first, because it leaves the model a step ahead of the rows.
+     */
+    private fun currentSlot(row: View): Int {
+        zoneReorder.cancelDrag()
+        return zoneList.indexOfChild(row)
+    }
+
+    /**
+     * After a drag the rows keep their views — and so their grips and buttons — but have to show the
+     * data of the order they have moved into.
+     */
     private fun refreshZoneLabels() {
         val now = System.currentTimeMillis()
         var i = 0
@@ -206,7 +236,6 @@ class WorldClockConfigActivity : Activity() {
             val zone = settings.zones[i]
             row.findViewById<TextView>(R.id.zone_city_label).text = zone.label
             row.findViewById<TextView>(R.id.zone_meta_label).text = zoneMeta(zone, now)
-            DragReorder.markHandle(row.findViewById(R.id.zone_handle), i)
             i++
         }
         updateZonesHeader()

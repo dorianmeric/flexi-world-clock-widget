@@ -1,118 +1,269 @@
 package com.flexi.worldclock
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.view.DragEvent
+import android.annotation.SuppressLint
 import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
+import kotlin.math.abs
 
 /**
- * Drag-and-drop reordering for the vertical list of timezone rows.
+ * Touch-driven reordering of the vertical list of timezone rows.
  *
- * The framework's own drag-and-drop is used rather than an AndroidX RecyclerView, so the widget
- * pack needs no extra UI dependency. Reordering happens live: as soon as the pointer enters another row,
- * that row is swapped, so releasing the finger simply ends the gesture. The swap slides rather than
- * jumps, so the grip on the row is never lost from one frame to the next.
+ * The framework's own drag-and-drop is deliberately not used: it moves a drag *shadow* while the
+ * real row stays put in the list, and the location events it delivers are too sparse to preview an
+ * order with. Here the row itself is what follows the finger. A long press on the grip lifts it, the
+ * row is then translated under the finger for the rest of the gesture, and every row the finger
+ * passes slides one slot out of the way — so the order the list would end up in is on screen before
+ * the finger comes up.
+ *
+ * The row views only change places when the finger lifts, which keeps the maths to the fixed slots
+ * measured when the row was lifted. The model, by contrast, takes the new order as soon as the
+ * finger reaches a slot, so the widget preview follows the drag as well. The two are brought back
+ * into agreement by [drop]; while a drag is in flight the model is therefore one step ahead of the
+ * rows, and only [onPreview] — which must not read the rows — may be called in that state.
  */
-internal object DragReorder {
+internal class DragReorder(
+    private val container: ViewGroup,
+    private val order: MutableList<*>,
+    private val onPreview: () -> Unit,
+    private val onReordered: () -> Unit,
+) {
+    /** The grip under the finger, and the row it belongs to, until the press is resolved. */
+    private var grip: View? = null
+    private var pressedRow: View? = null
 
-    private const val LABEL = "flexi-zone-row"
+    /** The row in hand, following the finger, or null when nothing is being dragged. */
+    private var lifted: View? = null
 
-    /** How long a row takes to slide to the slot it was swapped into. Short, so the list keeps up. */
-    private const val SLIDE_MS = 140L
+    /** Slot the lifted row's view still occupies, and the slot the model has it in now. */
+    private var fromIndex = -1
+    private var heldIndex = -1
 
+    /** Slot the finger is over: where the row would land if the finger came up now. */
+    private var targetIndex = -1
+
+    /** Centre of each slot, read once when the row is lifted and fixed for the gesture. */
+    private var slotCenters = FloatArray(0)
+
+    private var downRawY = 0f
+    private var lastRawY = 0f
+
+    /** Pointer that owns the gesture, so a second finger cannot take the row over from it. */
+    private var activePointer = MotionEvent.INVALID_POINTER_ID
+
+    private val touchSlop = ViewConfiguration.get(container.context).scaledTouchSlop
     private val slideInterpolator = DecelerateInterpolator()
+    private val armDrag = Runnable { arm() }
 
-    /** Registers [handle] as the drag source of the row rendered at [index]. */
-    fun markHandle(handle: View, index: Int) {
-        handle.setOnLongClickListener { view ->
-            val data = ClipData.newPlainText(LABEL, index.toString())
-            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            view.startDragAndDrop(data, View.DragShadowBuilder(view), index, 0)
-            true
+    /**
+     * Makes a long press on [row]'s grip pick that row up. The whole row is tracked rather than just
+     * the grip, so the row keeps following the finger once the finger wanders off the handle.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    fun markHandle(row: View) {
+        row.findViewById<View>(R.id.zone_handle)?.setOnTouchListener { gripView, event ->
+            onTouch(gripView, row, event)
         }
     }
 
-    /**
-     * Attaches the drop logic to the row container. [order] is the mutable list mirrored by the
-     * container's children, so every swap keeps the model and the views in sync. [onReordered] is
-     * notified on every change, including once when the drag ends.
-     */
-    fun attach(container: ViewGroup, order: MutableList<*>, onReordered: () -> Unit) {
-        container.setOnDragListener { _, event ->
-            when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> {
-                    val ours = isOurs(event)
-                    // The row the handle belongs to is carried as the drag's local state, so the
-                    // outline goes on the right row even before the pointer moves.
-                    if (ours) (event.localState as? Int)?.let { highlight(container, it) }
-                    ours
+    private fun onTouch(gripView: View, row: View, event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                // A drag needs somewhere to go, and the row has to stand for a zone in the list.
+                val slot = container.indexOfChild(row)
+                if (slot < 0 || slot >= order.size || container.childCount < 2) {
+                    return false
                 }
+                grip = gripView
+                pressedRow = row
+                gripView.isPressed = true
+                activePointer = event.getPointerId(0)
+                downRawY = event.rawY
+                lastRawY = event.rawY
+                container.postDelayed(armDrag, ViewConfiguration.getLongPressTimeout().toLong())
+            }
 
-                DragEvent.ACTION_DRAG_LOCATION -> {
-                    handleLocation(container, order, event, onReordered)
-                    true
+            MotionEvent.ACTION_MOVE -> {
+                lastRawY = event.rawY
+                if (lifted == null) {
+                    // The finger is on its way somewhere else — usually scrolling the page — so the
+                    // press that would have lifted the row is called off.
+                    if (abs(event.rawY - downRawY) > touchSlop) {
+                        endPress()
+                    }
+                } else {
+                    followFinger(event.rawY)
                 }
+            }
 
-                DragEvent.ACTION_DRAG_ENDED -> {
-                    highlight(container, -1)
-                    onReordered()
-                    true
+            MotionEvent.ACTION_UP -> if (lifted == null) endPress() else drop()
+
+            MotionEvent.ACTION_CANCEL -> if (lifted == null) endPress() else abandon()
+
+            // Another finger landing is ignored: rawY is the first pointer's, which is the one the
+            // press started with. That pointer leaving is the end of the gesture, even though the
+            // finger holding it was not the one lifted last.
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == activePointer) {
+                    if (lifted == null) endPress() else drop()
                 }
-
-                else -> true
             }
         }
+        return lifted != null || pressedRow != null
     }
 
     /**
-     * Puts the dotted outline of `bg_zone_row` on the row being dragged, and takes it off every
-     * other row. The row's background is a state list keyed on `state_activated`, so setting the
-     * flag is all the "in hand" look needs; -1 clears it when the drag ends.
+     * Ends a drag that is in flight, putting the rows and the model back the way they were. Callers
+     * that rebuild the rows have to do this first: a drag holds on to the very views they replace.
      */
-    fun highlight(container: ViewGroup, index: Int) {
-        for (i in 0 until container.childCount) {
-            container.getChildAt(i).isActivated = i == index
+    fun cancelDrag() {
+        if (lifted == null) {
+            endPress()
+        } else {
+            abandon()
         }
     }
 
-    /** Swaps the dragged row with the row currently under the pointer. */
-    private fun handleLocation(
-        container: ViewGroup,
-        order: MutableList<*>,
-        event: DragEvent,
-        onReordered: () -> Unit,
-    ) {
-        val from = draggedIndex(container, event)
-        if (from < 0) {
+    /** Calls off a press that never grew into a drag. */
+    private fun endPress() {
+        container.removeCallbacks(armDrag)
+        grip?.isPressed = false
+        grip = null
+        pressedRow = null
+        activePointer = MotionEvent.INVALID_POINTER_ID
+    }
+
+    /** Lifts the pressed row so it becomes the one that follows the finger. */
+    private fun arm() {
+        val row = pressedRow ?: return
+        val slot = container.indexOfChild(row)
+        if (slot < 0 || slot >= order.size) {
             return
         }
-        val to = slotFor(container, event, from)
-        if (to < 0 || from == to ||
-            from >= container.childCount || to >= container.childCount ||
-            from >= order.size || to >= order.size
-        ) {
+
+        val count = container.childCount
+        slotCenters = FloatArray(count)
+        for (i in 0 until count) {
+            val child = container.getChildAt(i)
+            slotCenters[i] = child.top + child.height / 2f
+        }
+
+        fromIndex = slot
+        heldIndex = slot
+        targetIndex = slot
+        lifted = row
+        highlight(container, slot)
+        // Floating above the list is also what draws the row over the rows it is pushed past.
+        row.elevation = LIFT_DP * container.resources.displayMetrics.density
+        // The page must not scroll out from under a row that is in hand.
+        container.requestDisallowInterceptTouchEvent(true)
+        row.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        followFinger(lastRawY)
+    }
+
+    /**
+     * Keeps the lifted row under the finger, moving the rest of the list on as the finger reaches a
+     * new slot. The lifted row's own view stays where it was laid out, so its translation is the
+     * whole of its movement and the slot bounds measured at lift time stay valid.
+     */
+    private fun followFinger(rawY: Float) {
+        val row = lifted ?: return
+        row.translationY = rawY - downRawY
+
+        val center = slotCenters[fromIndex] + row.translationY
+        val slot = nearestSlot(slotCenters, center)
+        if (slot == targetIndex) {
             return
         }
-        val row = container.getChildAt(from)
-        // Where every row is drawn right now, so each can slide from there into its new slot
-        // instead of jumping. Read before the children move and including any slide still in
-        // flight, so a swap that interrupts one carries on from where the row actually is.
-        val startTops = visualTops(container)
-        container.removeViewAt(from)
-        container.addView(row, to)
-        reorder(order, from, to)
-        container.setTag(R.id.drag_from_index, to)
-        refreshRowIndexes(container)
-        slideIntoPlace(container, startTops)
+
+        targetIndex = slot
+        // The model takes the order at once so the widget preview follows the finger; the rows are
+        // only moved on release, which is why the labels on screen never scramble mid-drag.
+        reorder(order, heldIndex, targetIndex)
+        heldIndex = targetIndex
+        shiftRows()
+        onPreview()
+    }
+
+    /** Slides every other row one slot out of the way of the lifted one. */
+    private fun shiftRows() {
+        val row = lifted ?: return
+        val shift = slotHeight(row)
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            if (child === row) {
+                continue
+            }
+            val offset = when {
+                fromIndex < targetIndex && i in (fromIndex + 1)..targetIndex -> -shift
+                fromIndex > targetIndex && i in targetIndex until fromIndex -> shift
+                else -> 0f
+            }
+            if (child.translationY == offset) {
+                continue
+            }
+            child.animate()
+                .translationY(offset)
+                .setDuration(SLIDE_MS)
+                .setInterpolator(slideInterpolator)
+                .start()
+        }
+    }
+
+    /**
+     * One slot is the lifted row plus any margin it carries, since the rows are stacked flush. Rows
+     * of unequal height would need each slot measured instead, but the city and meta labels are
+     * capped at one line, so every row in the list is the same height.
+     */
+    private fun slotHeight(row: View): Float {
+        val params = row.layoutParams as? ViewGroup.MarginLayoutParams
+        val margins = (params?.topMargin ?: 0) + (params?.bottomMargin ?: 0)
+        return (row.height + margins).toFloat()
+    }
+
+    /** Finger up: the rows take the order that has been on screen all along. */
+    private fun drop() {
+        val row = lifted ?: return
+        val drawnTops = drawnTops()
+        val from = fromIndex
+        val to = targetIndex
+        endGesture()
+        if (from != to) {
+            container.removeViewAt(from)
+            container.addView(row, to)
+        }
+        settle(drawnTops, row)
         onReordered()
     }
 
-    /** Top of every child as drawn: its laid-out top plus whatever slide is still in flight. */
-    private fun visualTops(container: ViewGroup): Map<View, Float> {
+    /** The gesture was taken away: nothing was committed, so every row slides back where it was. */
+    private fun abandon() {
+        val row = lifted ?: return
+        val drawnTops = drawnTops()
+        // Put the model back the way the rows still are.
+        reorder(order, heldIndex, fromIndex)
+        endGesture()
+        settle(drawnTops, row)
+        onPreview()
+    }
+
+    private fun endGesture() {
+        endPress()
+        highlight(container, -1)
+        lifted = null
+        fromIndex = -1
+        heldIndex = -1
+        targetIndex = -1
+        slotCenters = FloatArray(0)
+        container.requestDisallowInterceptTouchEvent(false)
+    }
+
+    /** Where every row is drawn right now: its laid-out top plus whatever slide is still in flight. */
+    private fun drawnTops(): Map<View, Float> {
         val tops = HashMap<View, Float>(container.childCount)
         for (i in 0 until container.childCount) {
             val child = container.getChildAt(i)
@@ -126,11 +277,12 @@ internal object DragReorder {
      *
      * The new positions are only known once the container has laid the children out again, so the
      * offsets are applied from a pre-draw pass; measuring any earlier would find the old tops and
-     * animate nothing.
+     * animate nothing. The row in hand is part of that: it stops being drawn under the finger and
+     * comes to rest in its slot, which is the only movement it makes that the finger did not ask for.
      */
-    private fun slideIntoPlace(container: ViewGroup, startTops: Map<View, Float>) {
-        // A fast drag can swap again before the previous slide was set up; drop that pending one
-        // so only the newest offsets are applied against the newest layout.
+    private fun settle(drawnTops: Map<View, Float>, liftedRow: View) {
+        // A second gesture can start before the first has settled; drop that pending pass so only
+        // the newest offsets are applied against the newest layout.
         (container.getTag(R.id.drag_slide_listener) as? ViewTreeObserver.OnPreDrawListener)?.let {
             if (container.viewTreeObserver.isAlive) {
                 container.viewTreeObserver.removeOnPreDrawListener(it)
@@ -144,88 +296,79 @@ internal object DragReorder {
                     observer.removeOnPreDrawListener(this)
                 }
                 container.setTag(R.id.drag_slide_listener, null)
-                applySlide(container, startTops)
+                applySettle(drawnTops, liftedRow)
                 return true
             }
         }
         container.setTag(R.id.drag_slide_listener, listener)
         observer.addOnPreDrawListener(listener)
+        // The pass is only reached through a traversal, and a drag that ends in the slot it started
+        // in changes nothing else, so ask for one explicitly.
+        container.requestLayout()
     }
 
     /** Puts each moved child back at its old drawn position and animates it home. */
-    private fun applySlide(container: ViewGroup, startTops: Map<View, Float>) {
+    private fun applySettle(drawnTops: Map<View, Float>, liftedRow: View) {
         for (i in 0 until container.childCount) {
             val child = container.getChildAt(i)
-            val start = startTops[child] ?: continue
-            val offset = start - child.top
+            val drawnTop = drawnTops[child] ?: continue
+            val offset = drawnTop - child.top
             if (offset == 0f && child.translationY == 0f) {
+                if (child === liftedRow) {
+                    child.elevation = 0f
+                }
                 continue
             }
             child.translationY = offset
-            child.animate()
+            val animation = child.animate()
                 .translationY(0f)
                 .setDuration(SLIDE_MS)
                 .setInterpolator(slideInterpolator)
-                .start()
+            if (child === liftedRow) {
+                animation.withEndAction { child.elevation = 0f }
+            }
+            animation.start()
         }
     }
 
-    /**
-     * Row index that should hold the dragged row.
-     *
-     * [DragEvent.getY] arrives in the coordinate space of the receiving view — the framework offsets
-     * it down the hierarchy before the listener sees it — so it is already relative to the container,
-     * as are the row bounds. Only the container's own scroll has to be added back.
-     */
-    fun slotFor(container: ViewGroup, event: DragEvent, skipIndex: Int): Int {
-        val count = container.childCount
-        if (count == 0) {
-            return -1
-        }
-        val y = event.y + container.scrollY
+    companion object {
+        /** How long a row takes to slide one slot out of the way, or to settle after a drop. */
+        private const val SLIDE_MS = 140L
 
-        if (y < container.getChildAt(0).top) {
-            return 0
-        }
-        for (i in 0 until count) {
-            if (i == skipIndex) {
-                continue
-            }
-            if (y < container.getChildAt(i).bottom) {
-                return i
+        /** How far the row in hand floats, in dp, so it is drawn over the rows it passes. */
+        private const val LIFT_DP = 6f
+
+        /**
+         * Puts the dotted outline of `bg_zone_row` on the row being dragged, and takes it off every
+         * other row. The row's background is a state list keyed on `state_activated`, so setting the
+         * flag is all the "in hand" look needs; -1 clears it when the drag ends.
+         */
+        fun highlight(container: ViewGroup, index: Int) {
+            for (i in 0 until container.childCount) {
+                container.getChildAt(i).isActivated = i == index
             }
         }
-        return count - 1
-    }
 
-    /** Pure list reorder, split out so it can be tested without a view hierarchy. */
-    fun <T> reorder(order: MutableList<T>, from: Int, to: Int) {
-        if (from == to || from < 0 || to < 0 || from >= order.size || to >= order.size) {
-            return
+        /** Row index that should hold a row drawn with its centre at [y]. Pure, so it is testable. */
+        fun nearestSlot(centers: FloatArray, y: Float): Int {
+            var best = 0
+            var bestDistance = abs(centers[0] - y)
+            for (i in 1 until centers.size) {
+                val distance = abs(centers[i] - y)
+                if (distance < bestDistance) {
+                    best = i
+                    bestDistance = distance
+                }
+            }
+            return best
         }
-        order.add(to, order.removeAt(from))
-    }
 
-    private fun isOurs(event: DragEvent): Boolean {
-        val description = event.clipDescription ?: return false
-        return LABEL.contentEquals(description.label)
-    }
-
-    /** Index of the row being dragged, remembered on the container between drag events. */
-    private fun draggedIndex(container: ViewGroup, event: DragEvent): Int {
-        (container.getTag(R.id.drag_from_index) as? Int)?.let { return it }
-        val local = event.localState
-        if (local is Int) {
-            container.setTag(R.id.drag_from_index, local)
-            return local
-        }
-        return -1
-    }
-
-    /** Keeps the per-handle tags aligned with the new child order. */
-    private fun refreshRowIndexes(container: ViewGroup) {
-        for (i in 0 until container.childCount) {
-            container.getChildAt(i).findViewById<View>(R.id.zone_handle)?.let { markHandle(it, i) }
+        /** Pure list reorder, split out so it can be tested without a view hierarchy. */
+        fun <T> reorder(order: MutableList<T>, from: Int, to: Int) {
+            if (from == to || from < 0 || to < 0 || from >= order.size || to >= order.size) {
+                return
+            }
+            order.add(to, order.removeAt(from))
         }
     }
 }
